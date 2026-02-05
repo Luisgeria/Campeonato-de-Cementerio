@@ -6,13 +6,6 @@
     <meta name="description" content="Sistema de gestión del campeonato de cementerio en tiempo real para CEIP Puente de Simancas">
     <meta name="theme-color" content="#10b981">
     
-    <!-- PWA Tags -->
-    <link rel="manifest" href="manifest-torneo.json">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Torneo Cementerio">
-    
     <title>Campeonato Cementerio - CEIP Puente de Simancas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -386,7 +379,7 @@
         // FIREBASE CONFIGURATION
         // ============================================
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, remove, update } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+        import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAn5KhS5RnhQOg99_IEe2mQ_FpN1aVPg9w",
@@ -398,9 +391,19 @@
             appId: "1:702912734861:web:2e87e72ff7e17d9a9f4b7f"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-        const tournamentRef = ref(database, 'torneo-cementerio');
+        let app, database, tournamentRef;
+        let firebaseEnabled = false;
+
+        // Initialize Firebase with error handling
+        try {
+            app = initializeApp(firebaseConfig);
+            database = getDatabase(app);
+            tournamentRef = ref(database, 'torneo-cementerio');
+            firebaseEnabled = true;
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            firebaseEnabled = false;
+        }
 
         // ============================================
         // GLOBAL STATE
@@ -427,7 +430,7 @@
         };
 
         // ============================================
-        // FIREBASE SYNC
+        // HYBRID SYNC (Firebase + localStorage)
         // ============================================
         function updateConnectionStatus(status, text) {
             const dots = [document.getElementById('conn-dot'), document.getElementById('login-conn-dot')];
@@ -435,53 +438,119 @@
             
             const className = status === 'connected' ? 'connection-dot bg-green-500' :
                             status === 'connecting' ? 'connection-dot bg-yellow-500' :
+                            status === 'offline' ? 'connection-dot bg-amber-500' :
                             'connection-dot bg-red-500';
             
             dots.forEach(dot => { if (dot) dot.className = className; });
             texts.forEach(textEl => { if (textEl) textEl.innerText = text; });
         }
 
-        function syncToFirebase() {
-            if (!state.teams || state.teams.length === 0) return;
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem('championshipState', JSON.stringify(state));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const saved = localStorage.getItem('championshipState');
+                if (saved) {
+                    const loaded = JSON.parse(saved);
+                    const currentAdmin = state.isAdmin;
+                    state = { ...loaded, isAdmin: currentAdmin };
+                    return true;
+                }
+            } catch (e) {
+                console.error('Error loading from localStorage:', e);
+            }
+            return false;
+        }
+
+        function syncData() {
+            // Save to localStorage always
+            saveToLocalStorage();
             
-            set(tournamentRef, {
-                teams: state.teams,
-                matches: state.matches,
-                teamNames: state.teamNames,
-                playoffs: state.playoffs,
-                lastUpdate: Date.now()
-            }).then(() => {
+            // Try to sync to Firebase if enabled
+            if (firebaseEnabled && state.teams && state.teams.length > 0) {
+                set(tournamentRef, {
+                    teams: state.teams,
+                    matches: state.matches,
+                    teamNames: state.teamNames,
+                    playoffs: state.playoffs,
+                    lastUpdate: Date.now()
+                }).then(() => {
+                    showSaveIndicator();
+                    updateConnectionStatus('connected', 'Sincronizado');
+                }).catch(err => {
+                    console.error('Error syncing to Firebase:', err);
+                    updateConnectionStatus('offline', 'Modo local');
+                });
+            } else {
                 showSaveIndicator();
-            }).catch(err => {
-                console.error('Error syncing to Firebase:', err);
-                showToast('Error al sincronizar', 'error');
-            });
+            }
         }
 
         function loadFromFirebase() {
+            if (!firebaseEnabled) {
+                console.log('Firebase not available, using localStorage only');
+                updateConnectionStatus('offline', 'Modo local');
+                if (loadFromLocalStorage()) {
+                    console.log('Loaded from localStorage');
+                }
+                return;
+            }
+
             updateConnectionStatus('connecting', 'Conectando...');
             
-            onValue(tournamentRef, (snapshot) => {
-                const data = snapshot.val();
-                if (data && data.teams && data.teams.length > 0) {
-                    state.teams = data.teams || [];
-                    state.matches = data.matches || [];
-                    state.teamNames = data.teamNames || {};
-                    state.playoffs = data.playoffs || state.playoffs;
+            // Set a timeout for Firebase connection
+            const timeout = setTimeout(() => {
+                console.log('Firebase timeout, falling back to localStorage');
+                updateConnectionStatus('offline', 'Modo local');
+                loadFromLocalStorage();
+            }, 5000);
+
+            try {
+                onValue(tournamentRef, (snapshot) => {
+                    clearTimeout(timeout);
+                    const data = snapshot.val();
                     
-                    updateConnectionStatus('connected', 'Conectado');
-                    
-                    // If user hasn't logged in yet, show the data
-                    if (document.getElementById('login-overlay').classList.contains('hidden')) {
-                        showApp();
+                    if (data && data.teams && data.teams.length > 0) {
+                        state.teams = data.teams || [];
+                        state.matches = data.matches || [];
+                        state.teamNames = data.teamNames || {};
+                        state.playoffs = data.playoffs || state.playoffs;
+                        
+                        // Also save to localStorage
+                        saveToLocalStorage();
+                        
+                        updateConnectionStatus('connected', 'Conectado');
+                        
+                        // Auto-update view if already logged in
+                        if (document.getElementById('login-overlay').classList.contains('hidden')) {
+                            showApp();
+                        }
+                    } else {
+                        // No data in Firebase, try localStorage
+                        if (loadFromLocalStorage() && state.teams.length > 0) {
+                            updateConnectionStatus('offline', 'Modo local');
+                        } else {
+                            updateConnectionStatus('connected', 'Listo');
+                        }
                     }
-                } else {
-                    updateConnectionStatus('connected', 'Sin datos');
-                }
-            }, (error) => {
-                console.error('Firebase error:', error);
-                updateConnectionStatus('error', 'Error de conexión');
-            });
+                }, (error) => {
+                    clearTimeout(timeout);
+                    console.error('Firebase error:', error);
+                    updateConnectionStatus('offline', 'Modo local');
+                    loadFromLocalStorage();
+                });
+            } catch (error) {
+                clearTimeout(timeout);
+                console.error('Firebase connection error:', error);
+                updateConnectionStatus('offline', 'Modo local');
+                loadFromLocalStorage();
+            }
         }
 
         // ============================================
@@ -688,12 +757,12 @@
             state.matches = generateRoundRobin();
             state.teamNames = {};
             
-            syncToFirebase();
+            syncData();
             renderTeams();
             renderCalendar();
             populateTeamFilter();
             showApp();
-            showToast('¡Torneo creado y sincronizado!');
+            showToast('¡Torneo creado!');
         };
 
         function generateRoundRobin() {
@@ -722,7 +791,7 @@
         // ============================================
         window.updateTeamName = function(teamId, newName) {
             state.teamNames[teamId] = newName;
-            syncToFirebase();
+            syncData();
         };
 
         function getTeamName(teamId) {
@@ -843,7 +912,7 @@
                 }
                 
                 m[k] = val;
-                syncToFirebase();
+                syncData();
                 
                 if (m.s1 !== null && m.s2 !== null) {
                     updateStandings();
@@ -861,7 +930,7 @@
                 m.s2 = Math.floor(Math.random() * 4); 
             });
             
-            syncToFirebase();
+            syncData();
             renderCalendar();
             updateStandings();
             renderPlayoffs();
@@ -1080,7 +1149,7 @@
                 match.winner = null;
             }
 
-            syncToFirebase();
+            syncData();
             renderPlayoffs();
         };
 
@@ -1210,10 +1279,17 @@
         window.clearAllData = function() {
             if (confirm('¿Estás seguro? Se borrarán TODOS los datos del torneo.')) {
                 if (confirm('Esta acción no se puede deshacer. ¿Continuar?')) {
-                    remove(tournamentRef).then(() => {
+                    if (firebaseEnabled) {
+                        remove(tournamentRef).then(() => {
+                            localStorage.removeItem('championshipState');
+                            showToast('Datos eliminados');
+                            setTimeout(() => location.reload(), 1000);
+                        });
+                    } else {
+                        localStorage.removeItem('championshipState');
                         showToast('Datos eliminados');
                         setTimeout(() => location.reload(), 1000);
-                    });
+                    }
                 }
             }
         };

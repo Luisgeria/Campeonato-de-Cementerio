@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Campeonato Cementerio - CEIP Puente de Simancas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .admin-only { display: none; }
+        .is-admin .admin-only { display: block; }
+        ::-webkit-scrollbar { height: 4px; width: 4px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        .bracket-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        input[type="number"], input[type="text"], input[type="password"] { font-size: 16px !important; }
+        .active-tab { background-color: #065f46 !important; border: 1px solid #10b981 !important; opacity: 1 !important; }
+    </style>
+</head>
+<body class="bg-stone-50 min-h-screen text-slate-900 overflow-x-hidden">
+
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay" class="fixed inset-0 bg-emerald-900 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center border-4 border-emerald-500">
+            <div class="text-5xl mb-4">🏫</div>
+            <h2 class="text-xl md:text-2xl font-black text-slate-800 mb-1">CEIP Puente de Simancas</h2>
+            <p class="text-emerald-600 font-bold text-xs mb-6 uppercase tracking-widest">Torneo de Cementerio</p>
+            <input type="password" id="pass-input" placeholder="Clave Profesor" 
+                class="w-full p-4 border-2 border-slate-100 rounded-2xl mb-4 text-center text-xl tracking-widest focus:border-emerald-500 outline-none transition-all">
+            <div class="flex flex-col gap-3">
+                <button onclick="checkLogin()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-2xl transition shadow-lg active:scale-95">
+                    Acceso Profesor
+                </button>
+                <button onclick="enterAsGuest()" class="w-full text-slate-400 font-bold py-2 text-sm hover:text-emerald-600 transition">
+                    Ver como Espectador
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NAVBAR -->
+    <nav class="bg-emerald-700 text-white shadow-lg sticky top-0 z-50 border-b-4 border-emerald-800">
+        <div class="max-w-5xl mx-auto px-4">
+            <div class="flex flex-col py-3 gap-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl md:text-3xl">🎾</span>
+                        <div>
+                            <h1 class="text-base md:text-lg font-black tracking-tighter uppercase italic leading-tight">Campeonato Cementerio</h1>
+                            <p class="text-[9px] md:text-[10px] font-medium opacity-90">Puente de Simancas · 2025/2026</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="nav-tabs" class="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-2 px-2 hidden">
+                    <button onclick="showTab('tab-setup', this)" class="tab-btn px-4 py-2 rounded-xl text-[10px] font-black transition-all whitespace-nowrap active-tab">1. EQUIPOS</button>
+                    <button onclick="showTab('tab-calendar', this)" class="tab-btn px-4 py-2 rounded-xl text-[10px] font-black transition-all whitespace-nowrap opacity-70">2. PARTIDOS</button>
+                    <button onclick="showTab('tab-standings', this)" class="tab-btn px-4 py-2 rounded-xl text-[10px] font-black transition-all whitespace-nowrap opacity-70">3. TABLA</button>
+                    <button onclick="showTab('tab-playoffs', this)" class="tab-btn px-4 py-2 rounded-xl text-[10px] font-black transition-all whitespace-nowrap opacity-70">4. FINALES</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-4 md:p-6">
+        
+        <!-- SECCIÓN CARGA (ADMIN) -->
+        <section id="step-upload" class="space-y-6 hidden admin-only">
+            <div class="bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl border-2 border-emerald-50 text-center">
+                <div class="mb-8">
+                    <div class="bg-emerald-50 w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-emerald-100">
+                        <span class="text-3xl md:text-4xl">📊</span>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-black text-emerald-900">Configuración Inicial</h2>
+                    <p class="text-slate-500 mt-2 text-xs md:text-sm px-4">
+                        Sube el Excel con <b>Nombre</b>, <b>Curso</b> y <b>Género</b> (F/M).
+                    </p>
+                </div>
+                
+                <div class="flex flex-col md:flex-row justify-center gap-3">
+                    <input type="file" id="excel-input" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFile(this)">
+                    <label for="excel-input" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-2xl cursor-pointer transition shadow-md active:scale-95 text-sm">
+                        📁 Cargar Listado Excel
+                    </label>
+                    <button onclick="loadMockData()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-4 px-6 rounded-2xl transition border border-slate-200 text-sm">
+                        🧪 Datos de Prueba
+                    </button>
+                </div>
+
+                <div id="file-preview" class="mt-8 hidden border-t border-emerald-50 pt-8">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        <div class="bg-emerald-50 p-3 rounded-2xl">
+                            <span class="block text-xl font-black text-emerald-600" id="count-alumni">0</span>
+                            <span class="text-[9px] uppercase font-bold text-emerald-800/50">Total</span>
+                        </div>
+                        <div class="bg-amber-50 p-3 rounded-2xl">
+                            <span class="block text-xl font-black text-amber-500" id="count-captains">0</span>
+                            <span class="text-[9px] uppercase font-bold text-amber-800/50">Capitanes</span>
+                        </div>
+                        <div class="bg-blue-50 p-3 rounded-2xl">
+                            <span class="block text-xl font-black text-blue-500" id="count-h">0</span>
+                            <span class="text-[9px] uppercase font-bold text-blue-800/50">Chicos</span>
+                        </div>
+                        <div class="bg-pink-50 p-3 rounded-2xl">
+                            <span class="block text-xl font-black text-pink-500" id="count-m">0</span>
+                            <span class="text-[9px] uppercase font-bold text-pink-800/50">Chicas</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-2xl mb-8 overflow-hidden border border-slate-200">
+                        <div class="p-3 bg-slate-100 text-[10px] font-black uppercase text-slate-500 text-left px-5">Alumnos detectados</div>
+                        <div class="max-h-60 overflow-y-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="sticky top-0 bg-slate-100 shadow-sm">
+                                    <tr class="text-[9px] uppercase text-slate-400 font-bold">
+                                        <th class="p-3 pl-5">Nombre</th>
+                                        <th class="p-3 text-center">Curso</th>
+                                        <th class="p-3 text-center">Género</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="preview-list-body" class="divide-y divide-slate-200 bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <button onclick="confirmParticipants()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 px-12 rounded-2xl shadow-xl transition transform active:scale-95 uppercase tracking-wider text-sm">
+                        Confirmar y Crear Torneo
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- EMPTY STATE -->
+        <section id="guest-empty" class="bg-white p-10 rounded-[2rem] text-center shadow-sm border border-slate-100 hidden">
+            <div class="text-5xl mb-4">⏳</div>
+            <h2 class="text-xl font-bold text-slate-400 italic">Torneo en preparación...</h2>
+        </section>
+
+        <!-- MAIN CONTENT -->
+        <div id="main-content" class="hidden">
+            <section id="tab-setup" class="tab-content active space-y-4">
+                <div class="flex justify-between items-center px-2">
+                    <h2 class="text-lg font-black text-emerald-900 uppercase italic">Equipos</h2>
+                    <button onclick="clearAllData()" class="admin-only text-red-400 text-[9px] font-black uppercase">Reiniciar</button>
+                </div>
+                <div id="teams-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </section>
+
+            <section id="tab-calendar" class="tab-content space-y-4">
+                <div class="flex justify-between items-center px-2">
+                    <h2 class="text-lg font-black text-emerald-900 uppercase italic">Partidos</h2>
+                    <button onclick="simulateScores()" class="admin-only bg-amber-400 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase shadow-sm">Simular</button>
+                </div>
+                <div id="calendar-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </section>
+
+            <section id="tab-standings" class="tab-content">
+                <div class="bg-white rounded-3xl shadow-sm border border-emerald-50 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="text-[9px] uppercase font-black text-emerald-700 bg-emerald-50/50">
+                                    <th class="p-4 text-center">#</th>
+                                    <th class="p-4">Equipo</th>
+                                    <th class="p-4 text-center">PJ</th>
+                                    <th class="p-4 text-center bg-emerald-100/30">PTS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="standings-body" class="divide-y divide-emerald-50"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-playoffs" class="tab-content">
+                <div class="bg-white p-4 md:p-8 rounded-3xl shadow-sm border border-emerald-50 overflow-hidden">
+                    <div class="bracket-scroll pb-6">
+                        <div id="playoff-bracket" class="flex justify-between gap-8 min-w-[700px] px-2"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <footer class="mt-12 mb-6 text-center px-4">
+            <div class="inline-block bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100">
+                <p class="text-slate-400 text-[10px] md:text-xs font-medium italic">
+                    app elaborada para uso educativo por <span class="text-emerald-600 font-black">@luisgeria</span>
+                </p>
+            </div>
+        </footer>
+    </main>
+
+    <script>
+        let participants = [];
+        let state = { isAdmin: false, teams: [], matches: [], teamNames: {} };
+
+        function checkLogin() {
+            if (document.getElementById('pass-input').value === "112233") {
+                state.isAdmin = true;
+                document.body.classList.add('is-admin');
+                document.getElementById('login-overlay').classList.add('hidden');
+                document.getElementById('step-upload').classList.remove('hidden');
+            } else { alert("Clave incorrecta"); }
+        }
+
+        function enterAsGuest() {
+            document.getElementById('login-overlay').classList.add('hidden');
+            if (state.teams.length === 0) document.getElementById('guest-empty').classList.remove('hidden');
+            else showApp();
+        }
+
+        function showTab(tabId, btn) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-tab'));
+            document.getElementById(tabId).classList.add('active');
+            btn.classList.add('active-tab');
+            
+            // Refrescar contenido dinámico al cambiar de pestaña
+            if(tabId === 'tab-calendar') renderCalendar();
+            if(tabId === 'tab-standings') updateStandings();
+            if(tabId === 'tab-playoffs') renderPlayoffs();
+            
+            btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+
+        function handleFile(input) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                
+                participants = json.map(row => {
+                    const keys = Object.keys(row);
+                    const nK = keys.find(k => k.toLowerCase().match(/nombre|alumno/)) || keys[0];
+                    const cK = keys.find(k => k.toLowerCase().match(/curso|nivel/)) || keys[1];
+                    const gK = keys.find(k => k.toLowerCase().match(/genero|sexo|gen/)) || keys[2];
+                    
+                    let gVal = String(row[gK] || '').toLowerCase();
+                    let gender = 'h'; 
+                    if (gVal.startsWith('f') || gVal.includes('mujer') || gVal.includes('chica')) gender = 'm';
+                    
+                    return { n: row[nK], c: parseInt(row[cK]) || 0, g: gender };
+                }).filter(p => p.n);
+                renderPreview();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function loadMockData() {
+            participants = [];
+            for(let i=0; i<40; i++) {
+                participants.push({ n: (i%2?"Alumno ":"Alumna ") + (i+1), c: [3,4,5,6][i%4], g: i%2?'h':'m' });
+            }
+            renderPreview();
+        }
+
+        function renderPreview() {
+            document.getElementById('count-alumni').innerText = participants.length;
+            document.getElementById('count-captains').innerText = participants.filter(p => p.c === 6).length;
+            document.getElementById('count-h').innerText = participants.filter(p => p.g === 'h').length;
+            document.getElementById('count-m').innerText = participants.filter(p => p.g === 'm').length;
+
+            const body = document.getElementById('preview-list-body');
+            body.innerHTML = participants.map(p => `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="p-3 pl-5 font-bold text-slate-700">${p.n}</td>
+                    <td class="p-3 text-center text-slate-500 font-black">${p.c}º</td>
+                    <td class="p-3 text-center">
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${p.g === 'm' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600'}">
+                            ${p.g === 'm' ? 'Chica' : 'Chico'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+
+            document.getElementById('file-preview').classList.remove('hidden');
+        }
+
+        function confirmParticipants() {
+            const caps = participants.filter(p => p.c === 6).sort(() => Math.random() - 0.5);
+            const others = participants.filter(p => p.c !== 6);
+            const boys = others.filter(p => p.g === 'h').sort(() => Math.random() - 0.5);
+            const girls = others.filter(p => p.g === 'm').sort(() => Math.random() - 0.5);
+
+            state.teams = Array.from({length: 10}, (_, i) => ({ id: i + 1, members: [] }));
+            caps.forEach((p, i) => state.teams[i % 10].members.push({...p, isCaptain: true}));
+            boys.forEach((p, i) => state.teams[i % 10].members.push(p));
+            girls.forEach((p, i) => state.teams[9 - (i % 10)].members.push(p));
+
+            state.matches = generateRoundRobin();
+            renderTeams();
+            renderCalendar();
+            showApp();
+        }
+
+        function generateRoundRobin() {
+            const ids = state.teams.map(t => t.id);
+            let matches = [];
+            for (let j = 0; j < 9; j++) {
+                for (let i = 0; i < 5; i++) {
+                    matches.push({ id: matches.length, t1: ids[i], t2: ids[9 - i], s1: null, s2: null, day: j + 1 });
+                }
+                ids.splice(1, 0, ids.pop());
+            }
+            return matches;
+        }
+
+        function updateTeamName(teamId, newName) {
+            state.teamNames[teamId] = newName;
+            // No es necesario llamar a renderTeams aquí para evitar que el input pierda el foco
+        }
+
+        function renderTeams() {
+            document.getElementById('teams-grid').innerHTML = state.teams.map(team => `
+                <div class="bg-white border-2 border-emerald-50 p-4 rounded-[2rem] shadow-sm">
+                    <div class="mb-3 px-1">
+                        ${state.isAdmin ? 
+                            `<input type="text" value="${state.teamNames[team.id] || ''}" oninput="updateTeamName(${team.id}, this.value)" placeholder="Nombre Equipo ${team.id}" class="w-full font-black text-emerald-800 bg-transparent border-b border-emerald-100 outline-none text-xs italic uppercase">` :
+                            `<div class="font-black text-emerald-800 uppercase italic text-xs">${state.teamNames[team.id] || 'Equipo ' + team.id}</div>`
+                        }
+                    </div>
+                    <div class="space-y-1">
+                        ${team.members.map(m => `
+                            <div class="flex justify-between items-center text-[10px] py-1 px-2 rounded-lg ${m.isCaptain ? 'bg-amber-50 font-bold' : ''}">
+                                <span class="truncate"><span class="${m.g === 'm' ? 'text-pink-500' : 'text-blue-500'}">●</span> ${m.n}</span>
+                                <span class="text-emerald-700 font-black">${m.c}º</span>
+                            </div>`).join('')}
+                    </div>
+                </div>`).join('');
+        }
+
+        function renderCalendar() {
+            const days = {};
+            state.matches.forEach(m => { if(!days[m.day]) days[m.day] = []; days[m.day].push(m); });
+            document.getElementById('calendar-container').innerHTML = Object.keys(days).map(day => `
+                <div class="bg-white border-2 border-emerald-50 rounded-[2rem] overflow-hidden shadow-sm">
+                    <div class="bg-emerald-800 text-white px-5 py-2 text-[9px] font-black uppercase">Jornada ${day}</div>
+                    <div class="p-4 space-y-3">
+                        ${days[day].map(m => `
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 text-right font-black text-[9px] truncate text-emerald-900 italic">${state.teamNames[m.t1] || 'Equipo ' + m.t1}</div>
+                                <div class="flex gap-1">
+                                    <input type="number" value="${m.s1??''}" ${state.isAdmin?'':'disabled'} onchange="updateScore(${m.id},'s1',this.value)" class="w-8 h-8 text-center border rounded-lg font-bold text-xs">
+                                    <input type="number" value="${m.s2??''}" ${state.isAdmin?'':'disabled'} onchange="updateScore(${m.id},'s2',this.value)" class="w-8 h-8 text-center border rounded-lg font-bold text-xs">
+                                </div>
+                                <div class="flex-1 text-left font-black text-[9px] truncate text-emerald-900 italic">${state.teamNames[m.t2] || 'Equipo ' + m.t2}</div>
+                            </div>`).join('')}
+                    </div>
+                </div>`).join('');
+        }
+
+        function updateScore(id, k, v) { const m = state.matches.find(x => x.id === id); if(m) m[k] = v===""?null:parseInt(v); }
+        function simulateScores() { state.matches.forEach(m => { m.s1 = Math.floor(Math.random()*4); m.s2 = Math.floor(Math.random()*4); }); renderCalendar(); updateStandings(); }
+
+        function updateStandings() {
+            const stats = state.teams.map(t => ({ id: t.id, name: state.teamNames[t.id] || 'Equipo ' + t.id, pj: 0, pts: 0 }));
+            state.matches.forEach(m => {
+                if(m.s1 !== null && m.s2 !== null) {
+                    const t1 = stats.find(s => s.id === m.t1), t2 = stats.find(s => s.id === m.t2);
+                    t1.pj++; t2.pj++;
+                    if(m.s1 > m.s2) { t1.pts += 3; t2.pts += 1; }
+                    else if(m.s1 < m.s2) { t2.pts += 3; t1.pts += 1; }
+                    else { t1.pts += 2; t2.pts += 2; }
+                }
+            });
+            stats.sort((a,b) => b.pts - a.pts);
+            document.getElementById('standings-body').innerHTML = stats.map((s, i) => `
+                <tr class="text-xs">
+                    <td class="p-4 text-center font-bold text-slate-400">${i+1}</td>
+                    <td class="p-4 font-black text-emerald-900 italic">${s.name}</td>
+                    <td class="p-4 text-center font-bold text-slate-400">${s.pj}</td>
+                    <td class="p-4 text-center bg-emerald-50 font-black text-emerald-700">${s.pts}</td>
+                </tr>`).join('');
+            return stats;
+        }
+
+        function renderPlayoffs() {
+            const stats = updateStandings(), top8 = stats.slice(0, 8), pairs = [[0, 7], [3, 4], [1, 6], [2, 5]];
+            document.getElementById('playoff-bracket').innerHTML = `
+                <div class="flex flex-col justify-around gap-6">
+                    ${pairs.map(p => `<div class="w-44 border border-emerald-100 rounded-2xl bg-white p-2 text-[10px] font-black italic">
+                        <div class="${top8[p[0]]?'text-emerald-900':'text-slate-200'} border-b pb-1 mb-1">${top8[p[0]]?.name || 'Esperando...'}</div>
+                        <div class="${top8[p[1]]?'text-emerald-900':'text-slate-200'}">${top8[p[1]]?.name || 'Esperando...'}</div>
+                    </div>`).join('')}
+                </div>
+                <div class="flex flex-col justify-around"><div class="h-12 w-32 border-2 border-dashed border-emerald-100 rounded-xl"></div><div class="h-12 w-32 border-2 border-dashed border-emerald-100 rounded-xl"></div></div>
+                <div class="flex flex-col justify-center"><div class="w-48 h-32 bg-emerald-500 rounded-[2rem] shadow-xl flex items-center justify-center text-white text-3xl">🏆</div></div>`;
+        }
+
+        function showApp() { 
+            document.getElementById('step-upload').classList.add('hidden'); 
+            document.getElementById('guest-empty').classList.add('hidden'); 
+            document.getElementById('main-content').classList.remove('hidden'); 
+            document.getElementById('nav-tabs').classList.remove('hidden'); 
+        }
+        function clearAllData() { if(confirm("¿Borrar todo?")) location.reload(); }
+    </script>
+</body>
+</html>

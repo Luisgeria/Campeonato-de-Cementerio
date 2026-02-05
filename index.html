@@ -3,6 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Sistema de gestión del campeonato de cementerio en tiempo real para CEIP Puente de Simancas">
+    <meta name="theme-color" content="#10b981">
+    
+    <!-- PWA Tags -->
+    <link rel="manifest" href="manifest-torneo.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Torneo Cementerio">
+    
     <title>Campeonato Cementerio - CEIP Puente de Simancas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -22,18 +32,58 @@
         
         @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
         .animate-slide-in { animation: slideIn 0.3s ease-out; }
         .animate-pulse { animation: pulse 1.5s ease-in-out infinite; }
-        .save-indicator { position: fixed; bottom: 20px; right: 20px; background: #10b981; color: white; padding: 12px 20px; border-radius: 12px; font-size: 12px; font-weight: bold; z-index: 1000; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); }
-        .toast { position: fixed; top: 80px; right: 20px; background: white; padding: 16px 20px; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 1000; border-left: 4px solid #10b981; animation: slideIn 0.3s ease-out; }
+        .save-indicator { 
+            position: fixed; 
+            bottom: 20px; 
+            right: 20px; 
+            background: #10b981; 
+            color: white; 
+            padding: 12px 20px; 
+            border-radius: 12px; 
+            font-size: 12px; 
+            font-weight: bold; 
+            z-index: 1000; 
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); 
+        }
+        .toast { 
+            position: fixed; 
+            top: 80px; 
+            right: 20px; 
+            background: white; 
+            padding: 16px 20px; 
+            border-radius: 16px; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15); 
+            z-index: 1000; 
+            border-left: 4px solid #10b981; 
+            animation: slideIn 0.3s ease-out; 
+        }
         .match-completed { background: #f0fdf4 !important; }
         .match-pending { background: white !important; }
         .playoff-match { min-height: 80px; }
+        .connection-dot { 
+            width: 8px; 
+            height: 8px; 
+            border-radius: 50%; 
+            display: inline-block; 
+            margin-right: 6px; 
+            transition: background-color 0.3s; 
+        }
         
         /* Loading spinner */
-        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #10b981; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .spinner { 
+            border: 3px solid #f3f3f3; 
+            border-top: 3px solid #10b981; 
+            border-radius: 50%; 
+            width: 40px; 
+            height: 40px; 
+            animation: spin 1s linear infinite; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
     </style>
 </head>
 <body class="bg-stone-50 min-h-screen text-slate-900 overflow-x-hidden">
@@ -42,7 +92,7 @@
     <div id="toast-container"></div>
 
     <!-- SAVE INDICATOR -->
-    <div id="save-indicator" class="save-indicator hidden">✓ Guardado</div>
+    <div id="save-indicator" class="save-indicator hidden">✓ Sincronizado</div>
 
     <!-- LOGIN OVERLAY -->
     <div id="login-overlay" class="fixed inset-0 bg-emerald-900 z-[100] flex items-center justify-center p-4">
@@ -50,6 +100,13 @@
             <div class="text-5xl mb-4">🏫</div>
             <h2 class="text-xl md:text-2xl font-black text-slate-800 mb-1">CEIP Puente de Simancas</h2>
             <p class="text-emerald-600 font-bold text-xs mb-6 uppercase tracking-widest">Torneo de Cementerio</p>
+            
+            <!-- Connection Status -->
+            <div class="mb-4 flex items-center justify-center gap-2">
+                <span id="login-conn-dot" class="connection-dot bg-slate-300"></span>
+                <span id="login-conn-text" class="text-[10px] font-bold text-slate-400 uppercase">Conectando...</span>
+            </div>
+            
             <input type="password" id="pass-input" placeholder="Clave Profesor" 
                 class="w-full p-4 border-2 border-slate-100 rounded-2xl mb-4 text-center text-xl tracking-widest focus:border-emerald-500 outline-none transition-all"
                 onkeypress="if(event.key==='Enter') checkLogin()">
@@ -76,13 +133,16 @@
                             <p class="text-[9px] md:text-[10px] font-medium opacity-90">Puente de Simancas · 2025/2026</p>
                         </div>
                     </div>
-                    <div class="admin-only flex gap-2">
-                        <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-800 px-3 py-2 rounded-xl text-[10px] font-bold transition" title="Exportar resultados">
-                            📊
-                        </button>
-                        <button onclick="showBackupModal()" class="bg-emerald-600 hover:bg-emerald-800 px-3 py-2 rounded-xl text-[10px] font-bold transition" title="Backup/Restaurar">
-                            💾
-                        </button>
+                    <div class="flex items-center gap-3">
+                        <span class="flex items-center gap-1 text-[10px] font-bold">
+                            <span id="conn-dot" class="connection-dot bg-slate-300"></span>
+                            <span id="conn-text" class="hidden md:inline">Conectando...</span>
+                        </span>
+                        <div class="admin-only flex gap-2">
+                            <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-800 px-3 py-2 rounded-xl text-[10px] font-bold transition" title="Exportar resultados">
+                                📊
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div id="nav-tabs" class="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-2 px-2 hidden">
@@ -315,36 +375,35 @@
                 <p class="text-slate-400 text-[10px] md:text-xs font-medium italic">
                     app elaborada para uso educativo por <span class="text-emerald-600 font-black">@luisgeria</span>
                     <span class="text-slate-300 mx-2">·</span>
-                    <span class="text-emerald-600 font-bold">Versión Mejorada 2.0</span>
+                    <span class="text-emerald-600 font-bold">Firebase Realtime</span>
                 </p>
             </div>
         </footer>
     </main>
 
-    <!-- BACKUP MODAL -->
-    <div id="backup-modal" class="hidden fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-3xl max-w-md w-full shadow-2xl">
-            <h3 class="text-xl font-black text-emerald-900 mb-4">💾 Backup y Restauración</h3>
-            <div class="space-y-3">
-                <button onclick="downloadBackup()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition">
-                    📥 Descargar Backup (JSON)
-                </button>
-                <div>
-                    <input type="file" id="backup-input" accept=".json" class="hidden" onchange="restoreBackup(this)">
-                    <label for="backup-input" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl cursor-pointer transition text-center">
-                        📤 Restaurar desde Backup
-                    </label>
-                </div>
-                <button onclick="closeBackupModal()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl transition">
-                    Cerrar
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <script>
+    <script type="module">
         // ============================================
-        // STATE MANAGEMENT
+        // FIREBASE CONFIGURATION
+        // ============================================
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, remove, update } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAn5KhS5RnhQOg99_IEe2mQ_FpN1aVPg9w",
+            authDomain: "reservas-ceip.firebaseapp.com",
+            databaseURL: "https://reservas-ceip-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "reservas-ceip",
+            storageBucket: "reservas-ceip.firebasestorage.app",
+            messagingSenderId: "702912734861",
+            appId: "1:702912734861:web:2e87e72ff7e17d9a9f4b7f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const tournamentRef = ref(database, 'torneo-cementerio');
+
+        // ============================================
+        // GLOBAL STATE
         // ============================================
         let participants = [];
         let state = {
@@ -368,34 +427,66 @@
         };
 
         // ============================================
-        // LOCALSTORAGE PERSISTENCE
+        // FIREBASE SYNC
         // ============================================
-        function saveState() {
-            try {
-                localStorage.setItem('championshipState', JSON.stringify(state));
+        function updateConnectionStatus(status, text) {
+            const dots = [document.getElementById('conn-dot'), document.getElementById('login-conn-dot')];
+            const texts = [document.getElementById('conn-text'), document.getElementById('login-conn-text')];
+            
+            const className = status === 'connected' ? 'connection-dot bg-green-500' :
+                            status === 'connecting' ? 'connection-dot bg-yellow-500' :
+                            'connection-dot bg-red-500';
+            
+            dots.forEach(dot => { if (dot) dot.className = className; });
+            texts.forEach(textEl => { if (textEl) textEl.innerText = text; });
+        }
+
+        function syncToFirebase() {
+            if (!state.teams || state.teams.length === 0) return;
+            
+            set(tournamentRef, {
+                teams: state.teams,
+                matches: state.matches,
+                teamNames: state.teamNames,
+                playoffs: state.playoffs,
+                lastUpdate: Date.now()
+            }).then(() => {
                 showSaveIndicator();
-            } catch (e) {
-                console.error('Error saving state:', e);
-                showToast('Error al guardar', 'error');
-            }
+            }).catch(err => {
+                console.error('Error syncing to Firebase:', err);
+                showToast('Error al sincronizar', 'error');
+            });
         }
 
-        function loadState() {
-            try {
-                const saved = localStorage.getItem('championshipState');
-                if (saved) {
-                    const loaded = JSON.parse(saved);
-                    // Merge saved state but keep isAdmin from current session
-                    const currentAdmin = state.isAdmin;
-                    state = { ...loaded, isAdmin: currentAdmin };
-                    return true;
+        function loadFromFirebase() {
+            updateConnectionStatus('connecting', 'Conectando...');
+            
+            onValue(tournamentRef, (snapshot) => {
+                const data = snapshot.val();
+                if (data && data.teams && data.teams.length > 0) {
+                    state.teams = data.teams || [];
+                    state.matches = data.matches || [];
+                    state.teamNames = data.teamNames || {};
+                    state.playoffs = data.playoffs || state.playoffs;
+                    
+                    updateConnectionStatus('connected', 'Conectado');
+                    
+                    // If user hasn't logged in yet, show the data
+                    if (document.getElementById('login-overlay').classList.contains('hidden')) {
+                        showApp();
+                    }
+                } else {
+                    updateConnectionStatus('connected', 'Sin datos');
                 }
-            } catch (e) {
-                console.error('Error loading state:', e);
-            }
-            return false;
+            }, (error) => {
+                console.error('Firebase error:', error);
+                updateConnectionStatus('error', 'Error de conexión');
+            });
         }
 
+        // ============================================
+        // UI HELPERS
+        // ============================================
         function showSaveIndicator() {
             const indicator = document.getElementById('save-indicator');
             indicator.classList.remove('hidden');
@@ -419,55 +510,54 @@
         // ============================================
         // LOGIN & INITIALIZATION
         // ============================================
-        function checkLogin() {
+        window.checkLogin = function() {
             if (document.getElementById('pass-input').value === "112233") {
                 state.isAdmin = true;
                 document.body.classList.add('is-admin');
                 document.getElementById('login-overlay').classList.add('hidden');
                 
-                if (loadState() && state.teams.length > 0) {
+                if (state.teams.length > 0) {
                     showApp();
-                    showToast('Sesión restaurada');
+                    showToast('Sesión iniciada');
                 } else {
                     document.getElementById('step-upload').classList.remove('hidden');
                 }
             } else {
                 showToast('Clave incorrecta', 'error');
             }
-        }
+        };
 
-        function enterAsGuest() {
+        window.enterAsGuest = function() {
             document.getElementById('login-overlay').classList.add('hidden');
             
-            if (loadState() && state.teams.length > 0) {
+            if (state.teams.length > 0) {
                 showApp();
             } else {
                 document.getElementById('guest-empty').classList.remove('hidden');
             }
-        }
+        };
 
         // ============================================
         // TAB NAVIGATION
         // ============================================
-        function showTab(tabId, btn) {
+        window.showTab = function(tabId, btn) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-tab'));
             document.getElementById(tabId).classList.add('active');
             btn.classList.add('active-tab');
             
-            // Refresh dynamic content
             if(tabId === 'tab-calendar') renderCalendar();
             if(tabId === 'tab-standings') updateStandings();
             if(tabId === 'tab-playoffs') renderPlayoffs();
             if(tabId === 'tab-stats') renderStats();
             
             btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-        }
+        };
 
         // ============================================
         // FILE HANDLING
         // ============================================
-        function handleFile(input) {
+        window.handleFile = function(input) {
             const file = input.files[0];
             if (!file) return;
 
@@ -488,7 +578,6 @@
                         let gVal = String(row[gK] || '').toLowerCase().trim();
                         let gender = 'h';
                         
-                        // Improved gender detection
                         if (gVal.startsWith('f') || gVal.includes('mujer') || gVal.includes('chica') || 
                             gVal.includes('femenino') || gVal === 'm' || gVal.includes('niña')) {
                             gender = 'm';
@@ -515,9 +604,9 @@
                 }
             };
             reader.readAsArrayBuffer(file);
-        }
+        };
 
-        function loadMockData() {
+        window.loadMockData = function() {
             document.getElementById('loading-indicator').classList.remove('hidden');
             
             setTimeout(() => {
@@ -547,7 +636,7 @@
                 document.getElementById('loading-indicator').classList.add('hidden');
                 showToast('Datos de prueba cargados');
             }, 500);
-        }
+        };
 
         function renderPreview() {
             document.getElementById('count-alumni').innerText = participants.length;
@@ -574,7 +663,7 @@
         // ============================================
         // TEAM CREATION
         // ============================================
-        function confirmParticipants() {
+        window.confirmParticipants = function() {
             if (participants.length < 10) {
                 showToast('Se necesitan al menos 10 alumnos', 'error');
                 return;
@@ -585,38 +674,32 @@
             const boys = others.filter(p => p.g === 'h').sort(() => Math.random() - 0.5);
             const girls = others.filter(p => p.g === 'm').sort(() => Math.random() - 0.5);
 
-            // Create 10 teams
             state.teams = Array.from({length: 10}, (_, i) => ({ id: i + 1, members: [] }));
             
-            // Distribute captains
             caps.forEach((p, i) => {
                 if (i < 10) {
                     state.teams[i].members.push({...p, isCaptain: true});
                 }
             });
             
-            // Distribute boys
             boys.forEach((p, i) => state.teams[i % 10].members.push(p));
-            
-            // Distribute girls (reverse order for balance)
             girls.forEach((p, i) => state.teams[9 - (i % 10)].members.push(p));
 
             state.matches = generateRoundRobin();
-            state.teamNames = {}; // Reset team names
+            state.teamNames = {};
             
-            saveState();
+            syncToFirebase();
             renderTeams();
             renderCalendar();
             populateTeamFilter();
             showApp();
-            showToast('¡Torneo creado con éxito!');
-        }
+            showToast('¡Torneo creado y sincronizado!');
+        };
 
         function generateRoundRobin() {
             const ids = state.teams.map(t => t.id);
             let matches = [];
             
-            // Round-robin algorithm
             for (let j = 0; j < 9; j++) {
                 for (let i = 0; i < 5; i++) {
                     matches.push({ 
@@ -637,10 +720,10 @@
         // ============================================
         // TEAM MANAGEMENT
         // ============================================
-        function updateTeamName(teamId, newName) {
+        window.updateTeamName = function(teamId, newName) {
             state.teamNames[teamId] = newName;
-            saveState();
-        }
+            syncToFirebase();
+        };
 
         function getTeamName(teamId) {
             return state.teamNames[teamId] || `Equipo ${teamId}`;
@@ -657,8 +740,7 @@
                                 value="${state.teamNames[team.id] || ''}" 
                                 oninput="updateTeamName(${team.id}, this.value)" 
                                 placeholder="Equipo ${team.id}" 
-                                class="w-full font-black text-emerald-800 bg-transparent border-b-2 border-emerald-100 focus:border-emerald-500 outline-none text-xs italic uppercase transition-colors px-1 py-1"
-                                aria-label="Nombre del equipo ${team.id}">` :
+                                class="w-full font-black text-emerald-800 bg-transparent border-b-2 border-emerald-100 focus:border-emerald-500 outline-none text-xs italic uppercase transition-colors px-1 py-1">` :
                             `<div class="font-black text-emerald-800 uppercase italic text-xs">${getTeamName(team.id)}</div>`
                         }
                         <div class="text-[9px] text-slate-400 font-bold mt-1">${team.members.length} miembros</div>
@@ -703,7 +785,6 @@
                 days[m.day].push(m); 
             });
 
-            // Update match counters
             const completed = state.matches.filter(m => m.s1 !== null && m.s2 !== null).length;
             document.getElementById('matches-completed').innerText = completed;
             document.getElementById('matches-total').innerText = state.matches.length;
@@ -730,8 +811,7 @@
                                         onchange="updateScore(${m.id}, 's1', this.value)" 
                                         min="0"
                                         max="99"
-                                        class="w-10 h-10 text-center border-2 ${isCompleted ? 'border-emerald-200 bg-white' : 'border-slate-200'} rounded-xl font-bold text-sm focus:border-emerald-500 outline-none transition-colors"
-                                        aria-label="Goles ${getTeamName(m.t1)}">
+                                        class="w-10 h-10 text-center border-2 ${isCompleted ? 'border-emerald-200 bg-white' : 'border-slate-200'} rounded-xl font-bold text-sm focus:border-emerald-500 outline-none transition-colors">
                                     <span class="text-slate-300 font-black">-</span>
                                     <input 
                                         type="number" 
@@ -740,8 +820,7 @@
                                         onchange="updateScore(${m.id}, 's2', this.value)" 
                                         min="0"
                                         max="99"
-                                        class="w-10 h-10 text-center border-2 ${isCompleted ? 'border-emerald-200 bg-white' : 'border-slate-200'} rounded-xl font-bold text-sm focus:border-emerald-500 outline-none transition-colors"
-                                        aria-label="Goles ${getTeamName(m.t2)}">
+                                        class="w-10 h-10 text-center border-2 ${isCompleted ? 'border-emerald-200 bg-white' : 'border-slate-200'} rounded-xl font-bold text-sm focus:border-emerald-500 outline-none transition-colors">
                                 </div>
                                 <div class="flex-1 text-left font-black text-[10px] truncate text-emerald-900 italic">
                                     ${getTeamName(m.t2)}
@@ -753,30 +832,28 @@
             `).join('');
         }
 
-        function updateScore(id, k, v) {
+        window.updateScore = function(id, k, v) {
             const m = state.matches.find(x => x.id === id);
             if (m) {
                 const val = v === "" ? null : parseInt(v);
                 
-                // Validate score
                 if (val !== null && (val < 0 || val > 99)) {
                     showToast('Puntuación inválida', 'error');
                     return;
                 }
                 
                 m[k] = val;
-                saveState();
+                syncToFirebase();
                 
-                // If both scores are set, update standings
                 if (m.s1 !== null && m.s2 !== null) {
                     updateStandings();
-                    renderCalendar(); // Refresh to show completed state
+                    renderCalendar();
                     showToast('Resultado guardado');
                 }
             }
-        }
+        };
 
-        function simulateScores() {
+        window.simulateScores = function() {
             if (!confirm('¿Simular resultados aleatorios para todos los partidos?')) return;
             
             state.matches.forEach(m => { 
@@ -784,12 +861,12 @@
                 m.s2 = Math.floor(Math.random() * 4); 
             });
             
-            saveState();
+            syncToFirebase();
             renderCalendar();
             updateStandings();
             renderPlayoffs();
             showToast('Resultados simulados');
-        }
+        };
 
         // ============================================
         // STANDINGS
@@ -838,7 +915,6 @@
                 }
             });
 
-            // Sort by points, then goal difference, then goals for
             stats.sort((a, b) => {
                 if (b.pts !== a.pts) return b.pts - a.pts;
                 const diffA = a.gf - a.gc;
@@ -882,7 +958,6 @@
             const stats = updateStandings();
             const top8 = stats.slice(0, 8);
 
-            // Update playoff matchups
             if (top8.length === 8) {
                 state.playoffs.quarters[0].t1 = top8[0]?.id;
                 state.playoffs.quarters[0].t2 = top8[7]?.id;
@@ -894,7 +969,6 @@
                 state.playoffs.quarters[3].t2 = top8[5]?.id;
             }
 
-            // Update semifinals based on quarter winners
             if (state.playoffs.quarters[0].winner && state.playoffs.quarters[1].winner) {
                 state.playoffs.semis[0].t1 = state.playoffs.quarters[0].winner;
                 state.playoffs.semis[0].t2 = state.playoffs.quarters[1].winner;
@@ -904,26 +978,22 @@
                 state.playoffs.semis[1].t2 = state.playoffs.quarters[3].winner;
             }
 
-            // Update final
             if (state.playoffs.semis[0].winner && state.playoffs.semis[1].winner) {
                 state.playoffs.final.t1 = state.playoffs.semis[0].winner;
                 state.playoffs.final.t2 = state.playoffs.semis[1].winner;
             }
 
             document.getElementById('playoff-bracket').innerHTML = `
-                <!-- CUARTOS -->
                 <div class="flex flex-col justify-around gap-6 min-w-[200px]">
                     <div class="text-[9px] font-black text-emerald-700 uppercase text-center mb-2">Cuartos</div>
                     ${state.playoffs.quarters.map((q, idx) => renderPlayoffMatch(q, 'quarter', idx)).join('')}
                 </div>
 
-                <!-- SEMIFINALES -->
                 <div class="flex flex-col justify-around gap-16 min-w-[200px]">
                     <div class="text-[9px] font-black text-emerald-700 uppercase text-center mb-2">Semifinales</div>
                     ${state.playoffs.semis.map((s, idx) => renderPlayoffMatch(s, 'semi', idx)).join('')}
                 </div>
 
-                <!-- FINAL -->
                 <div class="flex flex-col justify-center min-w-[240px]">
                     <div class="text-[9px] font-black text-emerald-700 uppercase text-center mb-4">Final</div>
                     ${renderPlayoffMatch(state.playoffs.final, 'final', 0)}
@@ -959,8 +1029,7 @@
                             onchange="updatePlayoffScore('${stage}', ${idx}, 's1', this.value)"
                             min="0"
                             max="99"
-                            class="w-8 h-8 text-center border rounded-lg font-bold text-xs ${canEdit ? 'border-emerald-200' : 'border-slate-200 bg-slate-50'}"
-                            aria-label="Goles ${t1Name}">
+                            class="w-8 h-8 text-center border rounded-lg font-bold text-xs ${canEdit ? 'border-emerald-200' : 'border-slate-200 bg-slate-50'}">
                     </div>
                     <div class="flex items-center justify-between ${match.winner === match.t2 ? 'pt-2 border-t border-emerald-300 bg-emerald-100 -mx-3 -mb-3 px-3 pb-3 rounded-b-2xl' : ''}">
                         <div class="flex-1 ${match.t2 ? 'text-emerald-900' : 'text-slate-300'} italic truncate">
@@ -973,14 +1042,13 @@
                             onchange="updatePlayoffScore('${stage}', ${idx}, 's2', this.value)"
                             min="0"
                             max="99"
-                            class="w-8 h-8 text-center border rounded-lg font-bold text-xs ${canEdit ? 'border-emerald-200' : 'border-slate-200 bg-slate-50'}"
-                            aria-label="Goles ${t2Name}">
+                            class="w-8 h-8 text-center border rounded-lg font-bold text-xs ${canEdit ? 'border-emerald-200' : 'border-slate-200 bg-slate-50'}">
                     </div>
                 </div>
             `;
         }
 
-        function updatePlayoffScore(stage, idx, key, value) {
+        window.updatePlayoffScore = function(stage, idx, key, value) {
             let match;
             if (stage === 'quarter') match = state.playoffs.quarters[idx];
             else if (stage === 'semi') match = state.playoffs.semis[idx];
@@ -995,14 +1063,12 @@
 
             match[key] = val;
 
-            // Determine winner
             if (match.s1 !== null && match.s2 !== null) {
                 if (match.s1 > match.s2) {
                     match.winner = match.t1;
                 } else if (match.s2 > match.s1) {
                     match.winner = match.t2;
                 } else {
-                    // In case of draw, ask for penalty shootout or extra time
                     if (confirm('Empate. ¿El ganador es ' + getTeamName(match.t1) + '? (No = ' + getTeamName(match.t2) + ')')) {
                         match.winner = match.t1;
                     } else {
@@ -1014,9 +1080,9 @@
                 match.winner = null;
             }
 
-            saveState();
+            syncToFirebase();
             renderPlayoffs();
-        }
+        };
 
         // ============================================
         // STATISTICS
@@ -1024,7 +1090,6 @@
         function renderStats() {
             const stats = updateStandings();
             
-            // Total goals
             let totalGoals = 0;
             let draws = 0;
             const completedMatches = state.matches.filter(m => m.s1 !== null && m.s2 !== null);
@@ -1040,7 +1105,6 @@
             document.getElementById('stat-avg-goals').innerText = avgGoals;
             document.getElementById('stat-draws').innerText = draws;
 
-            // Top scorers
             const topScorers = [...stats].sort((a, b) => b.gf - a.gf).slice(0, 5);
             document.getElementById('top-scorers').innerHTML = topScorers.map((t, i) => `
                 <div class="flex items-center justify-between p-3 bg-emerald-50 rounded-xl">
@@ -1055,7 +1119,6 @@
                 </div>
             `).join('');
 
-            // Best defenses
             const bestDefenses = [...stats].sort((a, b) => a.gc - b.gc).slice(0, 5);
             document.getElementById('best-defenses').innerHTML = bestDefenses.map((t, i) => `
                 <div class="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
@@ -1071,7 +1134,6 @@
                 </div>
             `).join('');
 
-            // Journey stats
             const journeyStats = {};
             for (let day = 1; day <= 9; day++) {
                 const dayMatches = state.matches.filter(m => m.day === day && m.s1 !== null && m.s2 !== null);
@@ -1091,12 +1153,11 @@
         }
 
         // ============================================
-        // EXPORT & BACKUP
+        // EXPORT
         // ============================================
-        function exportToExcel() {
+        window.exportToExcel = function() {
             const stats = updateStandings();
             
-            // Prepare data
             const standingsData = stats.map((s, i) => ({
                 'Posición': i + 1,
                 'Equipo': s.name,
@@ -1118,7 +1179,6 @@
                 'Visitante': getTeamName(m.t2)
             }));
 
-            // Create workbook
             const wb = XLSX.utils.book_new();
             const wsStandings = XLSX.utils.json_to_sheet(standingsData);
             const wsMatches = XLSX.utils.json_to_sheet(matchesData);
@@ -1126,56 +1186,9 @@
             XLSX.utils.book_append_sheet(wb, wsStandings, 'Clasificación');
             XLSX.utils.book_append_sheet(wb, wsMatches, 'Partidos');
             
-            // Download
             XLSX.writeFile(wb, `Campeonato_Cementerio_${new Date().toISOString().split('T')[0]}.xlsx`);
             showToast('Excel exportado correctamente');
-        }
-
-        function showBackupModal() {
-            document.getElementById('backup-modal').classList.remove('hidden');
-        }
-
-        function closeBackupModal() {
-            document.getElementById('backup-modal').classList.add('hidden');
-        }
-
-        function downloadBackup() {
-            const dataStr = JSON.stringify(state, null, 2);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `backup_torneo_${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-            showToast('Backup descargado');
-        }
-
-        function restoreBackup(input) {
-            const file = input.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const backup = JSON.parse(e.target.result);
-                    
-                    if (!backup.teams || !backup.matches) {
-                        throw new Error('Formato de backup inválido');
-                    }
-
-                    if (confirm('¿Restaurar este backup? Se perderán los datos actuales.')) {
-                        state = { ...backup, isAdmin: state.isAdmin };
-                        saveState();
-                        location.reload();
-                    }
-                } catch (error) {
-                    showToast('Error al restaurar backup', 'error');
-                    console.error(error);
-                }
-            };
-            reader.readAsText(file);
-        }
+        };
 
         // ============================================
         // UTILITY FUNCTIONS
@@ -1194,26 +1207,21 @@
             populateTeamFilter();
         }
 
-        function clearAllData() {
+        window.clearAllData = function() {
             if (confirm('¿Estás seguro? Se borrarán TODOS los datos del torneo.')) {
                 if (confirm('Esta acción no se puede deshacer. ¿Continuar?')) {
-                    localStorage.removeItem('championshipState');
-                    showToast('Datos eliminados');
-                    setTimeout(() => location.reload(), 1000);
+                    remove(tournamentRef).then(() => {
+                        showToast('Datos eliminados');
+                        setTimeout(() => location.reload(), 1000);
+                    });
                 }
             }
-        }
+        };
 
         // ============================================
-        // INITIALIZE ON LOAD
+        // INITIALIZE
         // ============================================
-        window.addEventListener('DOMContentLoaded', () => {
-            // Try to load saved state for guest view
-            if (loadState() && state.teams.length > 0 && !state.isAdmin) {
-                // Auto-show guest view if data exists
-                console.log('Saved tournament found');
-            }
-        });
+        loadFromFirebase();
     </script>
 </body>
 </html>

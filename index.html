@@ -1060,15 +1060,77 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const backup = JSON.parse(e.target.result);
+                    let backup = JSON.parse(e.target.result);
                     
-                    if (!backup.data || !backup.data.teams) {
+                    // Detectar formato del backup
+                    let importData;
+                    
+                    // Formato nuevo (con version y timestamp)
+                    if (backup.version && backup.data) {
+                        importData = backup.data;
+                    }
+                    // Formato antiguo (directo)
+                    else if (backup.teams && backup.matches) {
+                        importData = backup;
+                    }
+                    else {
                         showToast('Archivo de backup inválido', 'error');
                         return;
                     }
 
+                    // Validar estructura mínima
+                    if (!importData.teams || !importData.matches) {
+                        showToast('El backup no contiene datos válidos', 'error');
+                        return;
+                    }
+
+                    // Convertir formato antiguo al nuevo si es necesario
+                    if (importData.teams[0] && importData.teams[0].members) {
+                        // Formato antiguo detectado - convertir
+                        console.log('Convirtiendo formato antiguo...');
+                        
+                        // Convertir equipos con members a equipos simples con nombres
+                        const convertedTeams = importData.teams.map(team => {
+                            const captain = team.members.find(m => m.isCaptain);
+                            let teamName = importData.teamNames ? importData.teamNames[team.id] : null;
+                            
+                            if (!teamName) {
+                                teamName = captain ? `Equipo de ${captain.n}` : `Equipo ${team.id}`;
+                            }
+                            
+                            return {
+                                id: team.id,
+                                name: teamName
+                            };
+                        });
+
+                        importData.teams = convertedTeams;
+                        
+                        // Convertir playoffs si tiene quarters
+                        if (importData.playoffs && importData.playoffs.quarters) {
+                            importData.playoffs = {
+                                semifinals: [
+                                    importData.playoffs.semis[0] || { t1: null, t2: null, s1: null, s2: null, winner: null },
+                                    importData.playoffs.semis[1] || { t1: null, t2: null, s1: null, s2: null, winner: null }
+                                ],
+                                final: importData.playoffs.final || { t1: null, t2: null, s1: null, s2: null, winner: null }
+                            };
+                        }
+                    }
+
+                    // Asegurar estructura de playoffs
+                    if (!importData.playoffs) {
+                        importData.playoffs = {
+                            semifinals: [
+                                { t1: null, t2: null, s1: null, s2: null, winner: null },
+                                { t1: null, t2: null, s1: null, s2: null, winner: null }
+                            ],
+                            final: { t1: null, t2: null, s1: null, s2: null, winner: null }
+                        };
+                    }
+
                     if (confirm('¿Estás seguro? Esto sobrescribirá TODOS los datos actuales del torneo con los del backup.')) {
-                        state = backup.data;
+                        state = importData;
                         syncData();
                         showApp();
                         showToast('Backup importado correctamente');

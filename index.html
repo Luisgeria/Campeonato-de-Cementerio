@@ -6,6 +6,22 @@
     <meta name="description" content="Sistema de gestión del campeonato de cementerio en tiempo real para CEIP Puente de Simancas">
     <meta name="theme-color" content="#10b981">
     
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Cementerio">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+    
+    <!-- Windows Tiles -->
+    <meta name="msapplication-TileColor" content="#10b981">
+    <meta name="msapplication-TileImage" content="icon-192.png">
+    
     <title>Campeonato Cementerio - CEIP Puente de Simancas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -82,6 +98,43 @@
             0% { transform: rotate(0deg); } 
             100% { transform: rotate(360deg); } 
         }
+        
+        /* Team card styles */
+        .team-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .team-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+        }
+        
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
     </style>
 </head>
 <body class="bg-stone-50 min-h-screen text-slate-900 overflow-x-hidden">
@@ -91,6 +144,23 @@
 
     <!-- SAVE INDICATOR -->
     <div id="save-indicator" class="save-indicator hidden">✓ Sincronizado</div>
+
+    <!-- MODAL DE COMPONENTES DEL EQUIPO -->
+    <div id="team-modal" class="modal-overlay" onclick="closeTeamModal(event)">
+        <div class="modal-content bg-white rounded-[2rem] p-6 md:p-8 max-w-md w-full mx-4 shadow-2xl" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-6">
+                <h3 id="modal-team-name" class="text-xl font-black text-emerald-900">Equipo</h3>
+                <button onclick="closeTeamModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="modal-team-members" class="space-y-3">
+                <!-- Los miembros se cargarán aquí dinámicamente -->
+            </div>
+        </div>
+    </div>
 
     <!-- LOGIN OVERLAY -->
     <div id="login-overlay" class="fixed inset-0 bg-emerald-900 z-[100] flex items-center justify-center p-4">
@@ -701,12 +771,67 @@
         function renderTeams() {
             const grid = document.getElementById('team-grid');
             grid.innerHTML = state.teams.map((t, i) => `
-                <div class="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-2xl border-2 border-emerald-100 text-center shadow-sm hover:shadow-md transition-all">
+                <div class="team-card bg-gradient-to-br from-emerald-50 to-white p-4 rounded-2xl border-2 border-emerald-100 text-center shadow-sm" onclick="showTeamModal(${t.id})">
                     <div class="text-2xl font-black text-emerald-600 mb-1">${i + 1}</div>
                     <div class="text-xs font-bold text-slate-800">${t.name}</div>
+                    <div class="text-[10px] text-emerald-600 font-semibold mt-2">Ver componentes →</div>
                 </div>
             `).join('');
         }
+
+        // Mostrar modal con componentes del equipo
+        window.showTeamModal = function(teamId) {
+            const team = state.teams.find(t => t.id === teamId);
+            if (!team) return;
+
+            document.getElementById('modal-team-name').textContent = team.name;
+            
+            const membersContainer = document.getElementById('modal-team-members');
+            
+            // Verificar si el equipo tiene miembros (formato antiguo) o solo nombre (formato nuevo)
+            if (team.members && team.members.length > 0) {
+                // Formato antiguo con array de miembros
+                membersContainer.innerHTML = team.members.map((member, idx) => `
+                    <div class="flex items-center justify-between p-3 bg-emerald-50 rounded-xl">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm">
+                                ${idx + 1}
+                            </div>
+                            <div>
+                                <div class="font-bold text-slate-800 text-sm">${member.n}</div>
+                                <div class="text-xs text-slate-500">Curso: ${member.c}º</div>
+                            </div>
+                        </div>
+                        ${member.isCaptain ? '<span class="text-xs font-black text-amber-600 bg-amber-100 px-2 py-1 rounded-lg">CAPITÁN</span>' : ''}
+                    </div>
+                `).join('');
+            } else {
+                // Formato nuevo - equipo sin miembros detallados
+                membersContainer.innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="text-5xl mb-4">👥</div>
+                        <p class="text-slate-600 font-semibold mb-2">Equipo sin componentes registrados</p>
+                        <p class="text-xs text-slate-400">Este equipo fue creado desde un backup simplificado</p>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('team-modal').classList.add('active');
+        };
+
+        // Cerrar modal
+        window.closeTeamModal = function(event) {
+            if (!event || event.target.id === 'team-modal' || event.type === 'click') {
+                document.getElementById('team-modal').classList.remove('active');
+            }
+        };
+
+        // Cerrar con tecla ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeTeamModal();
+            }
+        });
 
         function renderCalendar() {
             const container = document.getElementById('calendar-container');
@@ -1363,9 +1488,125 @@
         };
 
         // ============================================
+        // PWA - SERVICE WORKER REGISTRATION
+        // ============================================
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('✅ Service Worker registrado:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('❌ Error al registrar Service Worker:', error);
+                    });
+            });
+        }
+
+        // ============================================
+        // PWA - INSTALL PROMPT
+        // ============================================
+        let deferredPrompt;
+        let installButton;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevenir que Chrome muestre el prompt automáticamente
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Mostrar botón de instalación
+            showInstallButton();
+        });
+
+        function showInstallButton() {
+            // Crear botón de instalación si no existe
+            if (!installButton) {
+                installButton = document.createElement('button');
+                installButton.innerHTML = '📱 Instalar App';
+                installButton.className = 'fixed bottom-4 right-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-2xl shadow-2xl z-50 animate-pulse text-sm flex items-center gap-2 transition-all active:scale-95';
+                installButton.onclick = installApp;
+                document.body.appendChild(installButton);
+                
+                // Auto-ocultar después de 10 segundos
+                setTimeout(() => {
+                    if (installButton && installButton.parentNode) {
+                        installButton.style.animation = 'slideOut 0.3s ease-out';
+                        setTimeout(() => {
+                            if (installButton && installButton.parentNode) {
+                                installButton.remove();
+                            }
+                        }, 300);
+                    }
+                }, 10000);
+            }
+        }
+
+        async function installApp() {
+            if (!deferredPrompt) {
+                return;
+            }
+
+            // Mostrar el prompt de instalación
+            deferredPrompt.prompt();
+            
+            // Esperar a que el usuario responda
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`Usuario respondió: ${outcome}`);
+            
+            if (outcome === 'accepted') {
+                showToast('¡App instalada correctamente! 🎉');
+            }
+            
+            // Limpiar el prompt
+            deferredPrompt = null;
+            
+            // Ocultar botón
+            if (installButton && installButton.parentNode) {
+                installButton.remove();
+                installButton = null;
+            }
+        }
+
+        // Detectar cuando la app se instala
+        window.addEventListener('appinstalled', () => {
+            console.log('✅ PWA instalada');
+            showToast('¡Aplicación instalada correctamente! 🎉');
+            deferredPrompt = null;
+            if (installButton && installButton.parentNode) {
+                installButton.remove();
+                installButton = null;
+            }
+        });
+
+        // Detectar si ya está instalada (standalone mode)
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            console.log('✅ App ejecutándose en modo instalado');
+        }
+
+        // ============================================
+        // OFFLINE DETECTION
+        // ============================================
+        window.addEventListener('online', () => {
+            updateConnectionStatus(true);
+            showToast('Conexión restaurada');
+        });
+
+        window.addEventListener('offline', () => {
+            updateConnectionStatus(false);
+            showToast('Sin conexión - Modo offline', 'error');
+        });
+
+        // ============================================
         // INITIALIZE
         // ============================================
         loadFromFirebase();
     </script>
+    
+    <!-- Animation for install button -->
+    <style>
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(100px); }
+        }
+    </style>
 </body>
 </html>

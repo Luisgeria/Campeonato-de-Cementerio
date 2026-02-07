@@ -249,11 +249,6 @@
                                 <option value="2">Jornada 2</option>
                                 <option value="3">Jornada 3</option>
                                 <option value="4">Jornada 4</option>
-                                <option value="5">Jornada 5</option>
-                                <option value="6">Jornada 6</option>
-                                <option value="7">Jornada 7</option>
-                                <option value="8">Jornada 8</option>
-                                <option value="9">Jornada 9</option>
                             </select>
                         </div>
                     </div>
@@ -400,6 +395,12 @@
             teams: [],
             matches: [],
             playoffs: {
+                quarters: [
+                    { t1: null, t2: null, s1: null, s2: null, winner: null },
+                    { t1: null, t2: null, s1: null, s2: null, winner: null },
+                    { t1: null, t2: null, s1: null, s2: null, winner: null },
+                    { t1: null, t2: null, s1: null, s2: null, winner: null }
+                ],
                 semifinals: [
                     { t1: null, t2: null, s1: null, s2: null, winner: null },
                     { t1: null, t2: null, s1: null, s2: null, winner: null }
@@ -627,39 +628,71 @@
         }
 
         // ============================================
-        // MATCH GENERATION
+        // MATCH GENERATION - SISTEMA DE GRUPOS
         // ============================================
         function generateRoundRobinMatches() {
             const teams = [...state.teams];
             const n = teams.length;
-            const rounds = n % 2 === 0 ? n - 1 : n;
-            const matchesPerRound = Math.floor(n / 2);
+            
+            // Dividir en dos grupos de 5 equipos
+            const groupA = teams.slice(0, 5);
+            const groupB = teams.slice(5, 10);
+            
+            state.matches = [];
+            let matchId = 0;
+            let currentDay = 1;
 
-            if (n % 2 !== 0) teams.push({ id: -1, name: 'BYE' });
-
-            const schedule = [];
-            const teamIds = teams.map(t => t.id);
-
-            for (let round = 0; round < rounds; round++) {
-                const roundMatches = [];
-                for (let i = 0; i < matchesPerRound; i++) {
-                    const home = teamIds[i];
-                    const away = teamIds[n - 1 - i];
-                    if (home !== -1 && away !== -1) {
+            // Función para generar partidos de un grupo
+            function generateGroupMatches(group, startDay) {
+                const groupTeams = group.map(t => t.id);
+                const rounds = groupTeams.length - 1; // 4 jornadas para 5 equipos
+                const matches = [];
+                
+                for (let round = 0; round < rounds; round++) {
+                    const roundMatches = [];
+                    for (let i = 0; i < Math.floor(groupTeams.length / 2); i++) {
+                        const home = groupTeams[i];
+                        const away = groupTeams[groupTeams.length - 1 - i];
+                        
                         roundMatches.push({
-                            day: round + 1,
+                            day: startDay + round,
                             t1: home,
                             t2: away,
                             s1: null,
                             s2: null
                         });
                     }
+                    matches.push(...roundMatches);
+                    
+                    // Rotar equipos (el primero se queda fijo)
+                    groupTeams.splice(1, 0, groupTeams.pop());
                 }
-                schedule.push(...roundMatches);
-                teamIds.splice(1, 0, teamIds.pop());
+                
+                return matches;
             }
 
-            state.matches = schedule;
+            // Generar partidos del Grupo A
+            const groupAMatches = generateGroupMatches(groupA, 1);
+            state.matches.push(...groupAMatches);
+            
+            // Generar partidos del Grupo B (mismas jornadas que Grupo A)
+            const groupBMatches = generateGroupMatches(groupB, 1);
+            state.matches.push(...groupBMatches);
+
+            // Inicializar playoffs con cuartos de final
+            state.playoffs = {
+                quarters: [
+                    { t1: null, t2: null, s1: null, s2: null, winner: null }, // 1A vs 4B
+                    { t1: null, t2: null, s1: null, s2: null, winner: null }, // 2A vs 3B
+                    { t1: null, t2: null, s1: null, s2: null, winner: null }, // 1B vs 4A
+                    { t1: null, t2: null, s1: null, s2: null, winner: null }  // 2B vs 3A
+                ],
+                semifinals: [
+                    { t1: null, t2: null, s1: null, s2: null, winner: null },
+                    { t1: null, t2: null, s1: null, s2: null, winner: null }
+                ],
+                final: { t1: null, t2: null, s1: null, s2: null, winner: null }
+            };
         }
 
         // ============================================
@@ -751,7 +784,8 @@
                 d: 0,
                 gf: 0,
                 gc: 0,
-                pts: 0
+                pts: 0,
+                group: t.id <= 5 ? 'A' : 'B'
             }));
 
             state.matches.forEach(m => {
@@ -783,23 +817,54 @@
                 }
             });
 
-            standings.sort((a, b) => {
-                if (b.pts !== a.pts) return b.pts - a.pts;
-                const diffA = a.gf - a.gc;
-                const diffB = b.gf - b.gc;
-                if (diffB !== diffA) return diffB - diffA;
-                return b.gf - a.gf;
-            });
+            // Separar y ordenar por grupos
+            const groupA = standings.filter(s => s.group === 'A');
+            const groupB = standings.filter(s => s.group === 'B');
 
+            const sortGroup = (group) => {
+                return group.sort((a, b) => {
+                    if (b.pts !== a.pts) return b.pts - a.pts;
+                    const diffA = a.gf - a.gc;
+                    const diffB = b.gf - b.gc;
+                    if (diffB !== diffA) return diffB - diffA;
+                    return b.gf - a.gf;
+                });
+            };
+
+            const sortedA = sortGroup(groupA);
+            const sortedB = sortGroup(groupB);
+
+            // Actualizar clasificados a playoffs si fase de grupos completa
+            const allMatchesPlayed = state.matches.every(m => m.s1 !== null && m.s2 !== null);
+            
+            if (allMatchesPlayed && state.playoffs.quarters[0].t1 === null) {
+                // Cuartos: 1A-4B, 2A-3B, 1B-4A, 2B-3A
+                state.playoffs.quarters[0].t1 = sortedA[0]?.id || null;
+                state.playoffs.quarters[0].t2 = sortedB[3]?.id || null;
+                
+                state.playoffs.quarters[1].t1 = sortedA[1]?.id || null;
+                state.playoffs.quarters[1].t2 = sortedB[2]?.id || null;
+                
+                state.playoffs.quarters[2].t1 = sortedB[0]?.id || null;
+                state.playoffs.quarters[2].t2 = sortedA[3]?.id || null;
+                
+                state.playoffs.quarters[3].t1 = sortedB[1]?.id || null;
+                state.playoffs.quarters[3].t2 = sortedA[2]?.id || null;
+                
+                syncData();
+            }
+
+            // Renderizar tabla por grupos
             const tbody = document.getElementById('standings-table');
-            tbody.innerHTML = standings.map((s, i) => {
-                let posClass = '';
-                if (i === 0) posClass = 'bg-yellow-50 border-l-4 border-yellow-400';
-                else if (i === 1) posClass = 'bg-slate-100 border-l-4 border-slate-400';
-                else if (i === 2) posClass = 'bg-orange-50 border-l-4 border-orange-400';
-                else if (i < 4) posClass = 'bg-emerald-50 border-l-4 border-emerald-400';
+            let html = '';
 
-                return `
+            // Grupo A
+            html += `<tr class="bg-emerald-100"><td colspan="10" class="py-2 px-2 font-black text-emerald-800 text-sm">GRUPO A</td></tr>`;
+            sortedA.forEach((s, i) => {
+                let posClass = '';
+                if (i < 4) posClass = 'bg-emerald-50 border-l-4 border-emerald-400';
+
+                html += `
                     <tr class="${posClass} border-b border-slate-100">
                         <td class="py-3 px-2 font-black text-slate-600">${i + 1}</td>
                         <td class="py-3 font-bold text-slate-800">${s.name}</td>
@@ -813,33 +878,89 @@
                         <td class="py-3 text-center font-black text-lg text-emerald-700 bg-emerald-50 rounded-lg px-2">${s.pts}</td>
                     </tr>
                 `;
-            }).join('');
+            });
 
-            return standings;
+            // Grupo B
+            html += `<tr class="bg-blue-100"><td colspan="10" class="py-2 px-2 font-black text-blue-800 text-sm">GRUPO B</td></tr>`;
+            sortedB.forEach((s, i) => {
+                let posClass = '';
+                if (i < 4) posClass = 'bg-blue-50 border-l-4 border-blue-400';
+
+                html += `
+                    <tr class="${posClass} border-b border-slate-100">
+                        <td class="py-3 px-2 font-black text-slate-600">${i + 1}</td>
+                        <td class="py-3 font-bold text-slate-800">${s.name}</td>
+                        <td class="py-3 text-center text-slate-600">${s.pj}</td>
+                        <td class="py-3 text-center text-emerald-600 font-bold">${s.v}</td>
+                        <td class="py-3 text-center text-slate-500">${s.e}</td>
+                        <td class="py-3 text-center text-red-500 font-bold">${s.d}</td>
+                        <td class="py-3 text-center font-bold text-emerald-700">${s.gf}</td>
+                        <td class="py-3 text-center font-bold text-red-600">${s.gc}</td>
+                        <td class="py-3 text-center font-bold ${s.gf - s.gc >= 0 ? 'text-emerald-600' : 'text-red-600'}">${s.gf - s.gc >= 0 ? '+' : ''}${s.gf - s.gc}</td>
+                        <td class="py-3 text-center font-black text-lg text-emerald-700 bg-emerald-50 rounded-lg px-2">${s.pts}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+
+            return [...sortedA, ...sortedB];
         }
 
         function renderPlayoffs() {
             const standings = updateStandings();
             
-            if (state.playoffs.semifinals[0].t1 === null && standings.length >= 4) {
-                state.playoffs.semifinals[0] = { t1: standings[0].id, t2: standings[3].id, s1: null, s2: null, winner: null };
-                state.playoffs.semifinals[1] = { t1: standings[1].id, t2: standings[2].id, s1: null, s2: null, winner: null };
+            const bracket = document.getElementById('playoffs-bracket');
+            
+            // Verificar si hay cuartos de final
+            if (!state.playoffs.quarters) {
+                state.playoffs.quarters = [
+                    { t1: null, t2: null, s1: null, s2: null, winner: null },
+                    { t1: null, t2: null, s1: null, s2: null, winner: null },
+                    { t1: null, t2: null, s1: null, s2: null, winner: null },
+                    { t1: null, t2: null, s1: null, s2: null, winner: null }
+                ];
             }
 
-            const bracket = document.getElementById('playoffs-bracket');
             bracket.innerHTML = `
-                <div class="grid md:grid-cols-2 gap-6">
-                    <div>
-                        <h3 class="text-sm font-black text-slate-700 mb-3">🏅 Semifinal 1</h3>
-                        ${renderPlayoffMatch(state.playoffs.semifinals[0], 'sf', 0)}
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-black text-slate-700 mb-3">🏅 Semifinal 2</h3>
-                        ${renderPlayoffMatch(state.playoffs.semifinals[1], 'sf', 1)}
+                <div class="mb-8">
+                    <h3 class="text-sm font-black text-slate-700 mb-4 text-center">🏅 CUARTOS DE FINAL</h3>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs font-bold text-emerald-600 mb-2 text-center">Cuarto 1: 1°A vs 4°B</p>
+                            ${renderPlayoffMatch(state.playoffs.quarters[0], 'quarters', 0)}
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-emerald-600 mb-2 text-center">Cuarto 2: 2°A vs 3°B</p>
+                            ${renderPlayoffMatch(state.playoffs.quarters[1], 'quarters', 1)}
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-blue-600 mb-2 text-center">Cuarto 3: 1°B vs 4°A</p>
+                            ${renderPlayoffMatch(state.playoffs.quarters[2], 'quarters', 2)}
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-blue-600 mb-2 text-center">Cuarto 4: 2°B vs 3°A</p>
+                            ${renderPlayoffMatch(state.playoffs.quarters[3], 'quarters', 3)}
+                        </div>
                     </div>
                 </div>
-                <div class="mt-6 max-w-md mx-auto">
-                    <h3 class="text-sm font-black text-slate-700 mb-3 text-center">🏆 FINAL</h3>
+
+                <div class="mb-8">
+                    <h3 class="text-sm font-black text-slate-700 mb-4 text-center">⚡ SEMIFINALES</h3>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs font-bold text-amber-600 mb-2 text-center">Semi 1: Ganador C1 vs Ganador C2</p>
+                            ${renderPlayoffMatch(state.playoffs.semifinals[0], 'semifinals', 0)}
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-amber-600 mb-2 text-center">Semi 2: Ganador C3 vs Ganador C4</p>
+                            ${renderPlayoffMatch(state.playoffs.semifinals[1], 'semifinals', 1)}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="max-w-md mx-auto">
+                    <h3 class="text-sm font-black text-slate-700 mb-4 text-center">🏆 FINAL</h3>
                     ${renderPlayoffMatch(state.playoffs.final, 'final', 0)}
                 </div>
             `;
@@ -924,7 +1045,9 @@
 
         window.updatePlayoffScore = function(type, idx, field, value) {
             let match;
-            if (type === 'sf') {
+            if (type === 'quarters') {
+                match = state.playoffs.quarters[idx];
+            } else if (type === 'semifinals') {
                 match = state.playoffs.semifinals[idx];
             } else {
                 match = state.playoffs.final;
@@ -946,12 +1069,32 @@
                 }
                 showToast('Ganador: ' + getTeamName(match.winner));
 
-                if (type === 'sf') {
-                    const sf1Winner = state.playoffs.semifinals[0].winner;
-                    const sf2Winner = state.playoffs.semifinals[1].winner;
-                    if (sf1Winner && sf2Winner) {
-                        state.playoffs.final.t1 = sf1Winner;
-                        state.playoffs.final.t2 = sf2Winner;
+                // Actualizar siguientes rondas
+                if (type === 'quarters') {
+                    // Cuarto 1 → Semi 1 (t1)
+                    if (idx === 0 && state.playoffs.quarters[0].winner) {
+                        state.playoffs.semifinals[0].t1 = state.playoffs.quarters[0].winner;
+                    }
+                    // Cuarto 2 → Semi 1 (t2)
+                    if (idx === 1 && state.playoffs.quarters[1].winner) {
+                        state.playoffs.semifinals[0].t2 = state.playoffs.quarters[1].winner;
+                    }
+                    // Cuarto 3 → Semi 2 (t1)
+                    if (idx === 2 && state.playoffs.quarters[2].winner) {
+                        state.playoffs.semifinals[1].t1 = state.playoffs.quarters[2].winner;
+                    }
+                    // Cuarto 4 → Semi 2 (t2)
+                    if (idx === 3 && state.playoffs.quarters[3].winner) {
+                        state.playoffs.semifinals[1].t2 = state.playoffs.quarters[3].winner;
+                    }
+                } else if (type === 'semifinals') {
+                    // Semi 1 → Final (t1)
+                    if (idx === 0 && state.playoffs.semifinals[0].winner) {
+                        state.playoffs.final.t1 = state.playoffs.semifinals[0].winner;
+                    }
+                    // Semi 2 → Final (t2)
+                    if (idx === 1 && state.playoffs.semifinals[1].winner) {
+                        state.playoffs.final.t2 = state.playoffs.semifinals[1].winner;
                     }
                 }
             } else {
@@ -1013,7 +1156,7 @@
             `).join('');
 
             const journeyStats = {};
-            for (let day = 1; day <= 9; day++) {
+            for (let day = 1; day <= 4; day++) {
                 const dayMatches = state.matches.filter(m => m.day === day && m.s1 !== null && m.s2 !== null);
                 const goals = dayMatches.reduce((sum, m) => sum + m.s1 + m.s2, 0);
                 journeyStats[day] = { total: dayMatches.length, goals };

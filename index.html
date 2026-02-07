@@ -490,9 +490,12 @@
             tournamentRef = database.ref('tournament');
             firebaseEnabled = true;
             console.log('✅ Firebase inicializado correctamente');
+            console.log('📊 Database URL:', firebaseConfig.databaseURL);
         } catch (error) {
             console.error('❌ Error al inicializar Firebase:', error);
+            console.error('Detalles:', error.message);
             firebaseEnabled = false;
+            showToast('⚠️ Firebase no disponible - Usando solo almacenamiento local', 'warning');
         }
 
         // ============================================
@@ -542,7 +545,7 @@
         // ============================================
         function loadFromFirebase() {
             if (!firebaseEnabled) {
-                console.log('Firebase deshabilitado, usando localStorage');
+                console.log('⚠️ Firebase deshabilitado, usando localStorage');
                 updateConnectionStatus(false);
                 loadFromLocalStorage();
                 return;
@@ -551,7 +554,13 @@
             // Listener de conexión
             const connectedRef = database.ref('.info/connected');
             connectedRef.on('value', (snap) => {
-                updateConnectionStatus(snap.val() === true);
+                const isConnected = snap.val() === true;
+                updateConnectionStatus(isConnected);
+                if (isConnected) {
+                    console.log('🟢 Conectado a Firebase');
+                } else {
+                    console.log('🔴 Desconectado de Firebase');
+                }
             });
 
             // Cargar datos
@@ -567,11 +576,21 @@
                             showApp();
                         }
                     } else {
+                        console.log('ℹ️ No hay datos en Firebase, intentando localStorage');
                         loadFromLocalStorage();
                     }
                 })
                 .catch((error) => {
                     console.error('❌ Error al cargar desde Firebase:', error);
+                    console.error('Código de error:', error.code);
+                    console.error('Mensaje:', error.message);
+                    
+                    if (error.code === 'PERMISSION_DENIED') {
+                        showToast('⚠️ No tienes permisos para leer de Firebase. Configura las reglas.', 'warning');
+                        console.error('💡 SOLUCIÓN: Ve a Firebase Console → Realtime Database → Reglas');
+                        console.error('💡 Cambia las reglas a: { "rules": { ".read": true, ".write": true } }');
+                    }
+                    
                     loadFromLocalStorage();
                 });
 
@@ -589,8 +608,11 @@
                         updateStandings();
                         renderPlayoffs();
                         renderStats();
+                        console.log('🔄 Interfaz actualizada con cambios de Firebase');
                     }
                 }
+            }, (error) => {
+                console.error('❌ Error en el listener de Firebase:', error);
             });
         }
 
@@ -617,8 +639,21 @@
                     })
                     .catch((error) => {
                         console.error('❌ Error al sincronizar:', error);
-                        showToast('Error al guardar en Firebase', 'error');
+                        console.error('Detalles del error:', error.code, error.message);
+                        
+                        // Mensajes más específicos según el tipo de error
+                        if (error.code === 'PERMISSION_DENIED') {
+                            showToast('⚠️ Permisos denegados. Configura las reglas de Firebase.', 'error');
+                            console.error('💡 SOLUCIÓN: Ve a Firebase Console → Realtime Database → Reglas');
+                            console.error('💡 Cambia las reglas a: { "rules": { ".read": true, ".write": true } }');
+                        } else if (error.message.includes('permission')) {
+                            showToast('⚠️ Error de permisos en Firebase. Revisa las reglas.', 'error');
+                        } else {
+                            showToast('❌ Error al guardar en Firebase: ' + error.message, 'error');
+                        }
                     });
+            } else {
+                console.warn('⚠️ Firebase deshabilitado - Datos guardados solo localmente');
             }
         }
 
@@ -666,15 +701,28 @@
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
             toast.className = 'toast';
-            toast.style.borderLeftColor = type === 'error' ? '#ef4444' : '#10b981';
+            
+            const colors = {
+                success: '#10b981',
+                error: '#ef4444',
+                warning: '#f59e0b'
+            };
+            
+            const icons = {
+                success: '✅',
+                error: '❌',
+                warning: '⚠️'
+            };
+            
+            toast.style.borderLeftColor = colors[type] || colors.success;
             toast.innerHTML = `
                 <div class="flex items-center gap-3">
-                    <span class="text-2xl">${type === 'error' ? '❌' : '✅'}</span>
+                    <span class="text-2xl">${icons[type] || icons.success}</span>
                     <span class="font-bold text-sm text-slate-700">${message}</span>
                 </div>
             `;
             container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
+            setTimeout(() => toast.remove(), 5000); // 5 segundos para mensajes importantes
         }
 
         // ============================================
